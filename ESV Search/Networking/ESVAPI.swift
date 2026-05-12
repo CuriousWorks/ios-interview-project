@@ -19,7 +19,7 @@ struct ESVAPI {
     ///         print(error)
     /// }
     /// ```
-    ///
+
     /// - Parameter query: The String to search for.
     /// - Returns: a `Result` containing ``SearchResults`` if successful, or an ``APIError`` if unsuccessful.
     func search(_ query: String) async -> Result<SearchResults, APIError> {
@@ -33,7 +33,9 @@ struct ESVAPI {
         request.addValue(apiKey, forHTTPHeaderField: "Authorization")
 
         do {
+            /////////////////////////////////////////////////////////////////////
             let (data, response) = try await URLSession.shared.data(for: request)
+            /////////////////////////////////////////////////////////////////////
 
             guard let httpResponse = response as? HTTPURLResponse else { return .failure(.unknownError(data)) }
 
