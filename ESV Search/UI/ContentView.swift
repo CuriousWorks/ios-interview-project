@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @State var queryText = ""
     @State var searchResults: [SearchResult] = []
+    @Environment(\.managedObjectContext) private var context
 
     var body: some View {
         
@@ -38,7 +39,10 @@ struct ContentView: View {
             }
             
             if !searchResults.isEmpty {
-                List(searchResults) {
+                Text("\(searchResults.count) matches found")
+                    .font(.headline)
+
+               List(searchResults) {
                     Text($0.reference)
                         .font(.title2.bold())
                         .listRowSeparator(.hidden)
@@ -52,8 +56,8 @@ struct ContentView: View {
                 }
                     .searchable(text: $queryText, prompt: "Search")
             } else {
-                Text("No Search Results")
-                    .font(Font.largeTitle.bold())
+                Text("No matches found")
+                    .font(.headline.bold())
                 Spacer()
             }
         }
