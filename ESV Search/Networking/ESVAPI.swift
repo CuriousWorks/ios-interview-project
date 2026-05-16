@@ -4,8 +4,6 @@ struct ESVAPI {
     
     let apiKey: String
 
-    private let baseUrl = "https://api.esv.org/v3/passage"
-
     /// Search the ESV API for a given term.
     ///
     /// Example usage:
@@ -24,7 +22,7 @@ struct ESVAPI {
     /// - Returns: a `Result` containing ``SearchResults`` if successful, or an ``APIError`` if unsuccessful.
     func search(_ query: String) async -> Result<SearchResults, APIError> {
 
-        let url = URL(string: "\(baseUrl)/search/")!
+        let url = URL(string: "\(ESVKeys.baseUrl)/search/")!
             .appending(queryItems: [
                 .init(name: "q", value: query),
                 .init(name: "page-size", value: "100")
