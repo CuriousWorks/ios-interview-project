@@ -7,6 +7,11 @@ enum ESVKeys {
     static let baseUrl: String = "https://api.esv.org/v3/passage"
 }
 
+enum DataSource {
+    case device
+    case server
+}
+
 let activeESVAPI = ESVAPI(apiKey: ESVKeys.apiKey)
 
 @main

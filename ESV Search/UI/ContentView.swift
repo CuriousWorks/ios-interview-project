@@ -3,48 +3,71 @@ import CoreData
 
 struct ContentView: View {
     @State var queryText = ""
-    @State var queryActivated = false
+    @State var isQueryActivated = false
     @State var searchResults: [SearchResult] = []
+    @State var dataSource = DataSource.server
+    @State var statusMessage = "Pending"
     @Environment(\.managedObjectContext) private var context
-            
+                
     var body: some View {
-        
         VStack {
-            Text("Crossway")
-                .font(Font.largeTitle.bold())
+            // Banner
+            Group {
+                Text("Crossway")
+                    .font(Font.largeTitle.bold())
+                
+                Text("Interview Challenge")
+                    .font(.headline)
+            }
             
-            Text("Interview Challenge")
-                .font(.headline)
-            
+            // Search Field
             TextField(
                 "Search",
                 text: $queryText
             )
             .padding(EdgeInsets(top: 0, leading: 50, bottom: 0, trailing: 50))
+            .textFieldStyle(RoundedBorderTextFieldStyle())
             .onSubmit {
-                queryActivated = true
+                // Toggle the task to run with the current search term.
+                isQueryActivated = true
             }
-            .task(id: queryActivated) {
-                queryActivated = false // reset search flag
-                
-                // One character is not a suitable search value, so we won't start search with less than 2 characters. There are valid 2 letter searches, Eg Og
+            .task(id: isQueryActivated) {
+                // Resetting isQueryActivated within the task refires the task. If the query is not activated, do not run the task.
+                if isQueryActivated == false { return }
+
+                // One character is not a suitable search value, so we won't start search with less than 2 characters.
+                // There are valid 2 letter searches, eg Og
                 if queryText.count < 2 {
                     searchResults = [] // Entering an empty search string should clear results
                     return
                 }
                 
-                // Here, we should first determine if we have this query cached in local storage (presently Core Data)
+                // Here, first determine if this query cached in local storage (presently using Core Data)
                 searchResults = await fetchSearchesInLocalContext(context, forQuery: queryText)
+                dataSource = DataSource.device
                 
+                // If the query has not already been cached, the search results will be empty,
+                // and the server will be called upon for the search data.
                 if searchResults.isEmpty {
-                    // If no locally stored matches, then fetch results from server
                     searchResults = await fetchMatchesFromServerIntoContext(context, forQuery: queryText)
+                    dataSource = DataSource.server
                 }
-            }
+                
+                isQueryActivated = false // Reset search flag so that the search field is ready for another search to be run.
+           }
             
-            Text("\(searchResults.count) matches found")
+            // Set the status message based on the current state
+            Text(isQueryActivated
+                 ? "Searching..."
+                 : searchResults.isEmpty
+                     ? "No matches found"
+                    // Determine if the search results are from the local device or the remote server
+                     : dataSource == .server
+                         ? "\(searchResults.count) Matches Found on Server"
+                         : "\(searchResults.count) Matches Found on Device")
                 .font(.headline)
             
+            // When the searchResults are updated, refresh the list.
             List(searchResults) {
                 Text($0.reference)
                     .font(.title2.bold())
@@ -63,41 +86,47 @@ struct ContentView: View {
 }
 
 
-private func fetchSearchesInLocalContext(_ context: NSManagedObjectContext, forQuery text: String) async -> [SearchResult] {
+private func fetchSearchesInLocalContext(_ context: NSManagedObjectContext, forQuery searchString: String) async -> [SearchResult] {
     let fetchRequest: NSFetchRequest<SearchResultEntity> = SearchResultEntity.fetchRequest()
-    var searchResult = [SearchResult]()
-    var aResult: SearchResult
+    var fetchResults = [SearchResult]()
+    var searchResult: SearchResult
 
     do {
+        fetchRequest.predicate = NSPredicate(format: "query == %@", searchString)
+        fetchRequest.sortDescriptors = [NSSortDescriptor(key: "index", ascending: true)]
         let matches = try context.fetch(fetchRequest)
         for match in matches {
-            aResult = SearchResult(reference: match.reference ?? "missing reference", content: match.content ?? "missing content")
-            searchResult.append(aResult)
+            searchResult = SearchResult(reference: match.reference ?? "missing reference", content: match.content ?? "missing content")
+            fetchResults.append(searchResult)
+            match.lastSearch = Date()
         }
+        try context.save() // Update the lastSearch date on device
     } catch {
         print("Failed to match items: \(error)")
     }
     
-    return searchResult
+    return fetchResults
 }
 
 
-private func fetchMatchesFromServerIntoContext(_ context: NSManagedObjectContext, forQuery text: String) async -> [SearchResult] {
+private func fetchMatchesFromServerIntoContext(_ context: NSManagedObjectContext, forQuery searchString: String) async -> [SearchResult] {
                     
     /////////////////////////////////////////////////
-    let result = await activeESVAPI.search(text)
+    let result = await activeESVAPI.search(searchString)
     /////////////////////////////////////////////////
     
     switch result {
     case .success(let response):
         if !response.results.isEmpty {
-            // We need to cache these search results locally, so do it here...
-            for match in response.results {
+            // Cache search results locally
+            // Add index to preserve sequence (otherwise not sortable)
+            for (index, match) in response.results.enumerated() {
                 let searchData = SearchResultEntity(context: context)
-                searchData.query = text
+                searchData.index = Int16(index)
+                searchData.query = searchString
                 searchData.reference = match.reference
                 searchData.content = match.content
-                //searchData.createdAt = Date()
+                searchData.lastSearch = Date()
             }
             
             do {
